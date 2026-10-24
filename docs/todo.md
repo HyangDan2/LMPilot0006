@@ -1,6 +1,6 @@
 # 웹 MVP Todo 및 작업 분장
 
-상태 기준: `[ ]` 미착수, `[-]` 진행 중, `[x]` 완료. 핵심 프론트엔드 MVP와 정적 빌드는 완료했다. GitHub Pages 출처에서 NVIDIA 직접 호출이 CORS로 차단되어 사용자 승인에 따라 Cloudflare Worker 중계기를 추가했다. 실제 Worker 배포와 NVIDIA 키를 이용한 통합 확인은 남아 있다. 아키텍처 결정이 바뀌면 Integrator가 이 문서와 `architecture.md`를 함께 갱신한다.
+상태 기준: `[ ]` 미착수, `[-]` 진행 중, `[x]` 완료. 핵심 프론트엔드 MVP와 정적 빌드는 완료했다. GitHub Pages 출처에서 NVIDIA 직접 호출이 CORS로 차단되어 사용자 승인에 따라 Cloudflare Worker 중계기를 추가하고 배포했다. 실제 NVIDIA 키를 이용한 브라우저 통합 확인은 남아 있다. 아키텍처 결정이 바뀌면 Integrator가 이 문서와 `architecture.md`를 함께 갱신한다.
 
 ## 공통 / Integrator
 
@@ -33,7 +33,8 @@
 - [x] GitHub Pages 출처의 NVIDIA CORS 사전 요청 결과를 기록한다: `https://hyangdan2.github.io` 출처의 `OPTIONS /v1/chat/completions` 응답에 `Access-Control-Allow-Origin`이 없었다.
 - [x] 사용자 키 전달형 Cloudflare Worker 중계기를 추가한다.
 - [x] Worker의 출처·경로·메서드 제한, 입력 크기 제한, 로그 비수집, 스트리밍 전달 요구사항을 구현하고 문서화한다.
-- [ ] Cloudflare Worker를 배포하고 Pages에서 실제 키로 연결 및 스트리밍을 확인한다.
+- [x] Cloudflare Worker를 `https://lmpilot-nvidia-proxy.hd2botstarter.workers.dev`에 배포한다.
+- [ ] Pages에서 실제 키로 NVIDIA 연결 및 스트리밍을 확인한다.
 - [ ] 운영자 키 보관 방식은 현재 범위에서 구현하지 않고 별도 제품 결정을 요청한다.
 
 ## QA
@@ -46,7 +47,8 @@
 - [ ] 전체 로컬 데이터 삭제 후 세션과 저장 설정이 제거되는지 확인한다.
 - [ ] 스트리밍 성공, 오류, 타임아웃, 사용자 취소 시 동작을 확인한다.
 - [x] NVIDIA 직접 호출의 Pages 출처 CORS 사전 요청을 확인한다.
-- [ ] 배포된 Worker의 CORS, 모델 목록, 채팅 스트리밍을 실제 브라우저에서 확인한다.
+- [x] 배포 Worker의 Pages 출처 CORS 사전 요청이 `204`로 응답하는지 확인한다.
+- [ ] 배포 Worker를 통한 모델 목록과 채팅 스트리밍을 실제 브라우저에서 확인한다.
 - [ ] HTML/Markdown 출력에서 스크립트 주입이 실행되지 않는지 확인한다.
 - [ ] 사용자 입력이 외부 모델 제공자에게 전달된다는 안내를 확인한다.
 - [ ] MVP 평가 게이트 결과와 차단 항목을 기록한다.
