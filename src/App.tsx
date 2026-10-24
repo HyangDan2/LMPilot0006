@@ -319,7 +319,7 @@ export default function App() {
       <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-top">
           <a className="brand" href="#" onClick={(event) => event.preventDefault()}>
-            <span className="brand-mark">L</span><span>LMPilot</span>
+            <span className="brand-mark">H</span><span>HD2Lab</span>
           </a>
           <button className="icon-button new-chat-button" onClick={createSession} title="새 대화" aria-label="새 대화">＋</button>
         </div>
