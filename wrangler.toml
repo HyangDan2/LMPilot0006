@@ -1,0 +1,9 @@
+name = "lmpilot-nvidia-proxy"
+main = "worker/index.js"
+compatibility_date = "2026-10-24"
+
+[observability]
+enabled = false
+
+[vars]
+ALLOWED_ORIGIN = "https://hyangdan2.github.io"

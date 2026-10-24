@@ -306,7 +306,8 @@ export default function App() {
   }
 
   function onComposerKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    const isComposing = event.nativeEvent.isComposing || event.keyCode === 229;
+    if (event.key === 'Enter' && !event.shiftKey && !isComposing) {
       event.preventDefault();
       void handleSend();
     }
@@ -477,6 +478,7 @@ function SettingsDialog({ settings, apiKey, testing, connectionResult, onClose, 
           <label className="field-label">Base URL
             <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder="https://integrate.api.nvidia.com/v1" autoComplete="url" />
           </label>
+          <div className="data-notice">GitHub Pages에서 NVIDIA를 사용하려면 배포한 Worker 주소 뒤에 <code>/v1</code>을 붙여 입력하세요.</div>
           <label className="field-label">모델명
             <input value={modelName} onChange={(event) => setModelName(event.target.value)} placeholder="예: nvidia/nemotron 모델 ID" autoComplete="off" />
           </label>

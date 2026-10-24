@@ -6,6 +6,8 @@ LMPilot0004의 PySide6 코딩 보조 흐름을 로컬에서 실행하는 정적 
 
 MVP 배포물에는 애플리케이션 서버가 없다. 프로덕션 빌드는 브라우저가 NVIDIA의 OpenAI 호환 API 또는 사용자가 지정한 호환 엔드포인트로 직접 요청한다. 브라우저 CORS 정책에 따라 직접 호출이 차단될 수 있다. 로컬 개발에서는 NVIDIA 호스티드 API에 한해 Vite 개발 서버 프록시(`/__nvidia_api_proxy__`)를 사용해 CORS 제한을 우회한다. 프록시는 개발 서버에만 존재하며 정적 빌드에는 포함되지 않는다.
 
+GitHub Pages에서 NVIDIA 직접 호출이 CORS로 차단된 것을 확인하여, 별도 배포하는 Cloudflare Worker 중계기를 추가했다. Pages는 여전히 정적 프론트엔드만 제공한다. 사용자는 Worker의 `https://<name>.<subdomain>.workers.dev/v1` 주소를 Base URL로 설정한다. Worker는 지정된 Pages 출처에서 오는 `/v1/models` GET과 `/v1/chat/completions` POST만 허용하고, NVIDIA의 고정 엔드포인트로 요청을 전달한다. 응답 본문은 버퍼링하지 않고 전달해 SSE 스트리밍을 유지한다.
+
 ## 제품 흐름
 
 1. 사용자가 새 세션을 만들거나 저장된 세션을 선택한다.
@@ -49,6 +51,8 @@ interface SessionRepository {
 ```
 
 추후 서버 방식으로 전환할 때는 서버 프록시용 `ChatProvider` 구현체를 추가한다. 이 경우에도 사용자 API-key를 서버에 보관하지 않는 정책을 유지하려면 요청별 전달이 필요하며, 서버 프로세스에서는 키를 로그·추적·오류 메시지에 남기지 않아야 한다. 서버에서 서비스 운영자 키를 보관하는 방식을 선택하려면 별도 제품 결정과 키 관리 정책이 필요하다.
+
+현재 Cloudflare Worker 방식은 기존 Provider 인터페이스와 Base URL 설정을 그대로 사용한다. 사용자 키는 요청별 `Authorization` 헤더로 Worker를 통과하며 Worker 변수나 저장소에는 등록하지 않는다. Worker 코드에는 요청/응답 본문을 기록하는 로깅이 없고 Worker 관측 로그를 명시적으로 비활성화한다. 다만 프록시 운영 계정과 플랫폼이 요청 경로에 있으므로 이용자는 운영자를 신뢰해야 한다. 배포된 Worker를 통한 실제 NVIDIA 호출은 사용자 계정과 키로 최종 확인해야 한다.
 
 ## 데이터와 키 정책
 
