@@ -1,9 +1,10 @@
-import type { ChatSession, ChatSettings } from './types';
+import type { ChatSession, ChatSettings, LocalAttachment } from './types';
 
 const APP_NAMESPACE = import.meta.env.VITE_APP_NAMESPACE || (import.meta.env.MODE === 'production' ? 'prod' : 'dev');
 const DB_NAME = APP_NAMESPACE === 'prod' ? 'lmpilot-web' : `lmpilot-web-${APP_NAMESPACE}`;
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const SESSION_STORE = 'sessions';
+const ATTACHMENT_STORE = 'attachments';
 const SETTINGS_KEY = APP_NAMESPACE === 'prod' ? 'lmpilot-web-settings-v1' : `lmpilot-web-${APP_NAMESPACE}-settings-v1`;
 const APP_CACHE_PREFIX = APP_NAMESPACE === 'prod' ? 'lmpilot-web-' : `lmpilot-web-${APP_NAMESPACE}-`;
 
@@ -20,6 +21,10 @@ function openDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(SESSION_STORE)) {
         const store = db.createObjectStore(SESSION_STORE, { keyPath: 'id' });
         store.createIndex('updatedAt', 'updatedAt');
+      }
+      if (!db.objectStoreNames.contains(ATTACHMENT_STORE)) {
+        const attachments = db.createObjectStore(ATTACHMENT_STORE, { keyPath: 'id' });
+        attachments.createIndex('sessionId', 'sessionId');
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -58,16 +63,48 @@ export const sessionStore = {
 
   async delete(id: string): Promise<void> {
     const db = await openDatabase();
-    const tx = db.transaction(SESSION_STORE, 'readwrite');
+    const tx = db.transaction([SESSION_STORE, ATTACHMENT_STORE], 'readwrite');
     tx.objectStore(SESSION_STORE).delete(id);
+    const attachmentIndex = tx.objectStore(ATTACHMENT_STORE).index('sessionId');
+    const request = attachmentIndex.openKeyCursor(IDBKeyRange.only(id));
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      tx.objectStore(ATTACHMENT_STORE).delete(cursor.primaryKey);
+      cursor.continue();
+    };
     await transactionDone(tx);
     db.close();
   },
 
   async deleteAll(): Promise<void> {
     const db = await openDatabase();
-    const tx = db.transaction(SESSION_STORE, 'readwrite');
+    const tx = db.transaction([SESSION_STORE, ATTACHMENT_STORE], 'readwrite');
     tx.objectStore(SESSION_STORE).clear();
+    tx.objectStore(ATTACHMENT_STORE).clear();
+    await transactionDone(tx);
+    db.close();
+  },
+};
+
+export const attachmentStore = {
+  async get(id: string): Promise<LocalAttachment | undefined> {
+    const db = await openDatabase();
+    const tx = db.transaction(ATTACHMENT_STORE, 'readonly');
+    const result = await new Promise<LocalAttachment | undefined>((resolve, reject) => {
+      const request = tx.objectStore(ATTACHMENT_STORE).get(id);
+      request.onsuccess = () => resolve(request.result as LocalAttachment | undefined);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    return result;
+  },
+
+  async saveAll(attachments: LocalAttachment[]): Promise<void> {
+    if (!attachments.length) return;
+    const db = await openDatabase();
+    const tx = db.transaction(ATTACHMENT_STORE, 'readwrite');
+    for (const attachment of attachments) tx.objectStore(ATTACHMENT_STORE).put(attachment);
     await transactionDone(tx);
     db.close();
   },

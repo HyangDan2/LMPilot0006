@@ -5,6 +5,23 @@ export interface ChatMessage {
   role: Role;
   content: string;
   createdAt: number;
+  displayContent?: string;
+  attachments?: AttachmentReference[];
+}
+
+export interface AttachmentReference {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+}
+
+export interface LocalAttachment extends AttachmentReference {
+  sessionId: string;
+  lastModified: number;
+  extractedText: string;
+  blob: Blob;
+  createdAt: number;
 }
 
 export interface ChatSession {

@@ -1,13 +1,19 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
-import { clearAppData, DEFAULT_SETTINGS, loadSettings, saveSettings, sessionStore } from './storage';
+import { attachmentStore, clearAppData, DEFAULT_SETTINGS, loadSettings, saveSettings, sessionStore } from './storage';
 import { OpenAICompatibleProvider } from './provider';
-import type { ChatMessage, ChatSession, ChatSettings } from './types';
+import type { AttachmentReference, ChatMessage, ChatSession, ChatSettings, LocalAttachment } from './types';
 
 const provider = new OpenAICompatibleProvider();
 const SYSTEM_PROMPT =
   'You are a careful coding assistant. Analyze the current code and issue, then produce a corrected solution. Preserve intended features when possible. When the issue description is incomplete, infer the most likely safe fix. Return a brief diagnosis, corrected code, and key changes.';
+const DOCUMENT_SYSTEM_PROMPT =
+  'You are a careful document analyst. Analyze the attached source documents and the user request. Separate facts from interpretation, cite the source filename for key findings, and return a clear Korean report with an executive summary, findings, and any limitations.';
+const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+const MAX_TOTAL_ATTACHMENT_TEXT = 80_000;
+const MAX_ATTACHMENTS = 5;
+const SUPPORTED_ATTACHMENT_EXTENSIONS = new Set(['txt', 'md', 'csv', 'json', 'yaml', 'yml', 'log', 'py', 'js', 'jsx', 'ts', 'tsx', 'html', 'css']);
 
 function makeId(): string {
   return crypto.randomUUID();
@@ -41,7 +47,24 @@ function downloadText(content: string, title: string): void {
   URL.revokeObjectURL(url);
 }
 
-function buildPrompt(message: string, importContext: string, currentCode: string, issue: string): string {
+function downloadReport(content: string, title: string, attachments: AttachmentReference[] = [], generatedAt = Date.now()): void {
+  const sources = attachments.length
+    ? `\n\n## 분석 문서\n${attachments.map((attachment) => `- ${attachment.name}`).join('\n')}`
+    : '';
+  const report = `# ${title}\n\n분석 시작: ${new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'short' }).format(generatedAt)}${sources}\n\n## 분석 결과\n\n${content}`;
+  downloadText(report, `${title}-분석결과`);
+}
+
+function downloadBlob(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildPrompt(message: string, importContext: string, currentCode: string, issue: string, attachments: Array<{ name: string; text: string }> = []): string {
   const context = [
     ['IMPORT_LAYER', importContext],
     ['CURRENT_CODE', currentCode],
@@ -50,7 +73,9 @@ function buildPrompt(message: string, importContext: string, currentCode: string
     .filter(([, value]) => value.trim())
     .map(([label, value]) => `[${label}]\n${value.trim()}`)
     .join('\n\n');
-  return context ? `${context}\n\n[REQUEST]\n${message.trim()}` : message.trim();
+  const documents = attachments.map(({ name, text }) => `[ATTACHED_DOCUMENT: ${name}]\n${text}`).join('\n\n');
+  const sections = [context, documents, `[REQUEST]\n${message.trim()}`].filter(Boolean);
+  return sections.join('\n\n');
 }
 
 export default function App() {
@@ -64,6 +89,7 @@ export default function App() {
   const [importContext, setImportContext] = useState('');
   const [currentCode, setCurrentCode] = useState('');
   const [issue, setIssue] = useState('');
+  const [pendingAttachments, setPendingAttachments] = useState<Array<{ id: string; file: File; text: string }>>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
   const [testing, setTesting] = useState(false);
@@ -73,6 +99,7 @@ export default function App() {
   const draftRef = useRef<HTMLTextAreaElement | null>(null);
   const endOfMessagesRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const fileTargetRef = useRef<'import' | 'code' | 'issue'>('import');
 
   useEffect(() => {
@@ -135,7 +162,7 @@ export default function App() {
 
   async function handleSend(event?: FormEvent) {
     event?.preventDefault();
-    const text = draft.trim();
+    const text = draft.trim() || (pendingAttachments.length ? '첨부한 문서를 분석하고 핵심 내용과 근거를 정리해 주세요.' : '');
     if (!text || busy || !ready) return;
     if (!settings.modelName.trim()) {
       setNotice({ text: '설정에서 모델명을 입력해 주세요.', error: true });
@@ -153,8 +180,15 @@ export default function App() {
     const base: ChatSession = existing ?? {
       id: makeId(), title: titleFrom(text), createdAt: now, updatedAt: now, messages: [],
     };
+    const attachmentRefs: AttachmentReference[] = pendingAttachments.map(({ id, file }) => ({
+      id, name: file.name, type: file.type || 'text/plain', size: file.size,
+    }));
+    const documentTexts = pendingAttachments.map(({ file, text: content }) => ({ name: file.name, text: content }));
+    const prompt = buildPrompt(text, importContext, currentCode, issue, documentTexts);
     const userMessage: ChatMessage = {
-      id: makeId(), role: 'user', content: buildPrompt(text, importContext, currentCode, issue), createdAt: now,
+      id: makeId(), role: 'user', content: prompt,
+      displayContent: buildPrompt(text, importContext, currentCode, issue), createdAt: now,
+      ...(attachmentRefs.length ? { attachments: attachmentRefs } : {}),
     };
     const assistantMessage: ChatMessage = {
       id: makeId(), role: 'assistant', content: '', createdAt: now,
@@ -166,12 +200,24 @@ export default function App() {
       messages: [...base.messages, userMessage, assistantMessage],
     };
 
+    try {
+      const savedAttachments: LocalAttachment[] = pendingAttachments.map(({ id, file, text: extractedText }) => ({
+        id, sessionId: base.id, name: file.name, type: file.type || 'text/plain', size: file.size,
+        lastModified: file.lastModified, extractedText, blob: file, createdAt: now,
+      }));
+      await attachmentStore.saveAll(savedAttachments);
+    } catch {
+      setNotice({ text: '첨부 문서를 브라우저 저장 공간에 저장하지 못했습니다. 저장 공간을 확인해 주세요.', error: true });
+      return;
+    }
+
     setActiveId(working.id);
     persistSession(working);
     setDraft('');
     setImportContext('');
     setCurrentCode('');
     setIssue('');
+    setPendingAttachments([]);
     setNotice(null);
     setBusy(true);
     const controller = new AbortController();
@@ -183,7 +229,7 @@ export default function App() {
         {
           model: settings.modelName.trim(),
           messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: attachmentRefs.length ? DOCUMENT_SYSTEM_PROMPT : SYSTEM_PROMPT },
             ...working.messages
               .filter((message) => message.id !== assistantMessage.id)
               .map(({ role, content }) => ({ role, content })),
@@ -287,6 +333,50 @@ export default function App() {
     }
   }
 
+  async function addAttachments(files: FileList | null) {
+    if (!files?.length) return;
+    const next = [...pendingAttachments];
+    for (const file of Array.from(files)) {
+      const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+      if (!SUPPORTED_ATTACHMENT_EXTENSIONS.has(extension)) {
+        setNotice({ text: `${file.name}: MVP에서 지원하지 않는 파일 형식입니다. 텍스트, Markdown, CSV, JSON, YAML 및 코드 파일을 선택해 주세요.`, error: true });
+        continue;
+      }
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        setNotice({ text: `${file.name}: 파일당 최대 2 MB까지 첨부할 수 있습니다.`, error: true });
+        continue;
+      }
+      if (next.length >= MAX_ATTACHMENTS) {
+        setNotice({ text: `한 번에 최대 ${MAX_ATTACHMENTS}개 파일까지 첨부할 수 있습니다.`, error: true });
+        break;
+      }
+      if (next.some((item) => item.file.name === file.name && item.file.size === file.size)) continue;
+      try {
+        const content = await file.text();
+        const currentChars = next.reduce((sum, item) => sum + item.text.length, 0);
+        if (currentChars + content.length > MAX_TOTAL_ATTACHMENT_TEXT) {
+          setNotice({ text: '첨부 문서의 전체 텍스트가 80,000자를 넘습니다. 파일 수를 줄이거나 내용을 나누어 첨부해 주세요.', error: true });
+          continue;
+        }
+        next.push({ id: makeId(), file, text: content });
+      } catch {
+        setNotice({ text: `${file.name} 파일을 텍스트로 읽지 못했습니다.`, error: true });
+      }
+    }
+    setPendingAttachments(next);
+    if (next.length) setNotice({ text: `${next.length}개 문서를 첨부했습니다. 전송할 때 파일과 분석용 텍스트가 이 세션에 로컬 저장됩니다.` });
+  }
+
+  async function restoreAttachment(reference: AttachmentReference) {
+    try {
+      const attachment = await attachmentStore.get(reference.id);
+      if (!attachment) throw new Error('missing');
+      downloadBlob(attachment.blob, attachment.name);
+    } catch {
+      setNotice({ text: `${reference.name} 원본을 로컬 저장소에서 불러오지 못했습니다.`, error: true });
+    }
+  }
+
   async function handleClearData() {
     const confirmed = window.confirm('저장된 모든 대화 세션과 설정을 삭제할까요? 이 작업은 되돌릴 수 없습니다.');
     if (!confirmed) return;
@@ -298,6 +388,7 @@ export default function App() {
       setSettings(DEFAULT_SETTINGS);
       setApiKey('');
       setDraft('');
+      setPendingAttachments([]);
       setSettingsOpen(false);
       setNotice({ text: '이 앱에 저장된 모든 세션과 설정을 삭제했습니다.' });
     } catch {
@@ -369,14 +460,14 @@ export default function App() {
             </div>
           ) : (
             <div className="message-list">
-              {activeSession.messages.map((message) => (
+              {activeSession.messages.map((message, messageIndex) => (
                 <article className={`message message-${message.role}`} key={message.id}>
                   {message.role === 'assistant' && <div className="message-avatar">✳</div>}
                   <div className="message-body">
                     {message.role === 'user'
-                      ? <div className="user-bubble"><ReactMarkdown rehypePlugins={[rehypeSanitize]}>{message.content}</ReactMarkdown></div>
+                      ? <div className="user-bubble"><ReactMarkdown rehypePlugins={[rehypeSanitize]}>{message.displayContent ?? message.content}</ReactMarkdown>{message.attachments?.length ? <ul className="message-attachments">{message.attachments.map((attachment) => <li key={attachment.id}><span>▤ {attachment.name}</span><button type="button" onClick={() => void restoreAttachment(attachment)}>원본 저장</button></li>)}</ul> : null}</div>
                       : message.content
-                        ? <><div className="assistant-markdown"><ReactMarkdown rehypePlugins={[rehypeSanitize]}>{message.content}</ReactMarkdown></div><div className="response-actions"><button className="copy-response" onClick={() => void copyText(message.content).then((ok) => setNotice({ text: ok ? '응답을 복사했습니다.' : '클립보드에 복사하지 못했습니다.', error: !ok }))} title="응답 복사">복사</button><button className="copy-response" onClick={() => downloadText(message.content, activeSession.title)} title="응답 저장">저장</button></div></>
+                        ? <><div className="assistant-markdown"><ReactMarkdown rehypePlugins={[rehypeSanitize]}>{message.content}</ReactMarkdown></div><div className="response-actions"><button className="copy-response" onClick={() => void copyText(message.content).then((ok) => setNotice({ text: ok ? '응답을 복사했습니다.' : '클립보드에 복사하지 못했습니다.', error: !ok }))} title="응답 복사">복사</button><button className="copy-response" onClick={() => downloadReport(message.content, activeSession.title, activeSession.messages[messageIndex - 1]?.attachments, message.createdAt)} title="분석 결과 보고서 저장">보고서 저장</button></div></>
                         : busy && message.id === activeSession.messages.at(-1)?.id
                           ? <div className="typing-indicator"><i /><i /><i /></div>
                           : null}
@@ -399,13 +490,14 @@ export default function App() {
                 <label>Import Layer<button type="button" className="file-load-button" onClick={() => chooseFile('import')}>파일 불러오기</button><textarea value={importContext} onChange={(event) => setImportContext(event.target.value)} placeholder="프로젝트 맥락, 참고사항, 관련 파일 요약" rows={3} /></label>
               </div>
             </details>
-            {(draft.trim() || currentCode.trim() || issue.trim() || importContext.trim()) && (
+            {(draft.trim() || currentCode.trim() || issue.trim() || importContext.trim() || pendingAttachments.length > 0) && (
               <details className="request-preview">
                 <summary>전송 내용 미리보기</summary>
-                <pre>{buildPrompt(draft, importContext, currentCode, issue)}</pre>
+                <pre>{buildPrompt(draft || '첨부 문서를 분석하고 핵심 내용과 근거를 정리해 주세요.', importContext, currentCode, issue, pendingAttachments.map(({ file, text }) => ({ name: file.name, text })))}</pre>
               </details>
             )}
             <input ref={fileInputRef} className="visually-hidden" type="file" accept=".txt,.md,.py,.js,.jsx,.ts,.tsx,.json,.yaml,.yml,.log,.csv,.html,.css" onChange={(event) => { void loadContextFile(event.target.files?.[0]); event.target.value = ''; }} />
+            <input ref={attachmentInputRef} className="visually-hidden" type="file" multiple accept=".txt,.md,.py,.js,.jsx,.ts,.tsx,.json,.yaml,.yml,.log,.csv,.html,.css" onChange={(event) => { void addAttachments(event.target.files); event.target.value = ''; }} />
             <textarea
               ref={draftRef}
               className="composer-input"
@@ -416,11 +508,18 @@ export default function App() {
               rows={1}
               aria-label="메시지 입력"
             />
+            <div className="composer-tools">
+              <button type="button" className="file-load-button attach-document-button" onClick={() => attachmentInputRef.current?.click()} disabled={busy}>＋ 문서 첨부</button>
+              <span className="attachment-limits">텍스트 문서 최대 5개 · 파일당 2 MB</span>
+            </div>
+            {pendingAttachments.length > 0 && <ul className="pending-attachments" aria-label="첨부할 문서">
+              {pendingAttachments.map(({ id, file }) => <li key={id}><span>▤ {file.name} <small>{(file.size / 1024).toFixed(0)} KB</small></span><button type="button" onClick={() => setPendingAttachments((items) => items.filter((item) => item.id !== id))} aria-label={`${file.name} 첨부 취소`}>×</button></li>)}
+            </ul>}
             <div className="composer-footer">
-              <span className="privacy-hint">입력한 내용은 선택한 모델 제공자에게 전송됩니다.</span>
+              <span className="privacy-hint">첨부 문서의 텍스트도 선택한 모델 제공자에게 전송됩니다.</span>
               {busy
                 ? <button type="button" className="send-button stop-button" onClick={stopGeneration} aria-label="응답 중단">■</button>
-                : <button type="submit" className="send-button" disabled={!draft.trim() || !ready} aria-label="메시지 보내기">↑</button>}
+                : <button type="submit" className="send-button" disabled={(!draft.trim() && !pendingAttachments.length) || !ready} aria-label="메시지 보내기">↑</button>}
             </div>
           </form>
           <p className="disclaimer">AI 응답은 부정확할 수 있습니다. 중요한 코드는 실행 전에 검토하세요.</p>

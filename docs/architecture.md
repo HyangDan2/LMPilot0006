@@ -1,43 +1,44 @@
-# 웹 MVP 아키텍처 제안
+# Web MVP Architecture
 
-## 목표와 범위
+## Goals and scope
 
-LMPilot0004의 PySide6 코딩 보조 흐름을 로컬에서 실행하는 정적 웹 MVP로 제공한다. UI는 PC와 모바일에서 사용할 수 있는 ChatGPT 스타일의 다중 대화 화면으로 구성한다. MVP 평가 이후 정적 호스팅 또는 서버 API를 선택할 수 있도록 외부 모델 호출 계약을 UI와 분리한다.
+Bring the LMPilot0004 PySide6 coding-assistant workflow to a local-first static web app. The UI provides a ChatGPT-style multi-conversation experience on desktop and mobile. Keep the external model contract separate from the UI so the project can support static hosting and optional server APIs as needed.
 
-MVP 배포물에는 애플리케이션 서버가 없다. 프로덕션 빌드는 브라우저가 NVIDIA의 OpenAI 호환 API 또는 사용자가 지정한 호환 엔드포인트로 직접 요청한다. 브라우저 CORS 정책에 따라 직접 호출이 차단될 수 있다. 로컬 개발에서는 NVIDIA 호스티드 API에 한해 Vite 개발 서버 프록시(`/__nvidia_api_proxy__`)를 사용해 CORS 제한을 우회한다. 프록시는 개발 서버에만 존재하며 정적 빌드에는 포함되지 않는다.
+The production frontend is static. Production builds can call NVIDIA's OpenAI-compatible API or another compatible endpoint directly, but browser CORS policies may block those requests. During local development, a Vite dev-server proxy handles requests to NVIDIA's hosted API. For GitHub Pages, use the separately deployed Cloudflare Worker relay described below.
 
-GitHub Pages에서 NVIDIA 직접 호출이 CORS로 차단된 것을 확인하여, 별도 배포하는 Cloudflare Worker 중계기를 추가했다. Pages는 여전히 정적 프론트엔드만 제공한다. 사용자는 Worker의 `https://<name>.<subdomain>.workers.dev/v1` 주소를 Base URL로 설정한다. Worker는 지정된 Pages 출처에서 오는 `/v1/models` GET과 `/v1/chat/completions` POST만 허용하고, NVIDIA의 고정 엔드포인트로 요청을 전달한다. 응답 본문은 버퍼링하지 않고 전달해 SSE 스트리밍을 유지한다.
+The Cloudflare Worker relay was added after direct NVIDIA calls from the GitHub Pages origin were blocked by CORS. Pages still serves only the static frontend. Users set the Worker URL, `https://<name>.<subdomain>.workers.dev/v1`, as the Base URL. The Worker accepts only `GET /v1/models` and `POST /v1/chat/completions` from the configured Pages origin and forwards requests to NVIDIA's fixed endpoint. It streams response bodies without buffering so SSE output remains incremental.
 
-## 제품 흐름
+## Product flow
 
-1. 사용자가 새 세션을 만들거나 저장된 세션을 선택한다.
-2. 사용자는 대화 메시지를 입력하고, 필요하면 코드·이슈·Import Layer 내용을 포함한다.
-3. 프론트엔드는 세션 메시지와 시스템 지침을 Provider 요청으로 변환한다.
-4. Provider가 모델 제공자에 스트리밍 요청을 보내고 응답 청크를 UI에 전달한다.
-5. 대화는 로컬 세션 저장소에 저장되고, 다음 실행 시 복원된다.
+1. The user creates a session or selects a saved session.
+2. The user enters a message and, if needed, provides code, an issue, Import Layer content, or text documents.
+   Text documents are extracted as UTF-8 in the browser and shown in a preview before sending.
+3. The frontend converts session messages and system instructions into a Provider request.
+4. The Provider streams a request to the model provider and delivers response chunks to the UI.
+5. Conversations are saved in local session storage and restored on the next visit.
 
-## 계층과 책임
+## Layers and responsibilities
 
-| 계층 | 책임 | MVP 구현 방향 |
+| Layer | Responsibility | MVP implementation |
 |---|---|---|
-| Presentation | 채팅 화면, 반응형 레이아웃, 설정·확인 모달, 스트리밍 표시 | React + TypeScript 권장, PC 사이드바와 모바일 내비게이션 |
-| Application | 세션 생성·전환·삭제, 전송, 취소, 설정 적용 | 프레임워크 컴포넌트와 분리된 유스케이스/상태 관리 |
-| Domain | Session, Message, Provider 요청/응답 계약 | 제공자에 종속되지 않는 타입 정의 |
-| Provider Adapter | 모델 API 요청, SSE 스트림 파싱, 오류 정규화 | 브라우저 직접 NVIDIA/OpenAI 호환 연결 |
-| Local Persistence | 대화 및 비밀이 아닌 설정 영속화 | IndexedDB 세션 저장, 설정 저장소에는 URL·모델명만 허용 |
-| Future Backend | 서버 API, 인증, 사용량 제어, 제공자 키 관리 | MVP 평가 통과 후 별도 BFF/API로 결정 |
+| Presentation | Chat view, responsive layout, settings and confirmation dialogs, streaming indicator | React + TypeScript; desktop sidebar and mobile navigation |
+| Application | Create, switch, and delete sessions; send and cancel requests; apply settings | Use cases and state management separated from provider details |
+| Domain | Session, Message, Provider request and response contracts | Provider-independent types |
+| Provider Adapter | Model API requests, SSE parsing, normalized errors | Browser calls through the configured compatible endpoint; NVIDIA calls use the local Vite proxy in development or the Cloudflare Worker on Pages |
+| Local Persistence | Conversations, attachments, and non-secret settings | IndexedDB for sessions and attachments; only URL and model name in settings |
+| Optional Future Backend | Additional server APIs, authentication, usage control, provider-key management | Consider after MVP evaluation; the current Worker is a narrow relay, not a general application backend |
 
-Vite 빌드 결과는 정적 파일이어야 한다. 로컬 개발 시 개발 서버를 사용하며, 배포 시 저장소 프로젝트 경로를 포함한 base path 설정이 필요할 수 있다. `file://`로 HTML을 직접 여는 실행 방식은 API 요청과 브라우저 보안 제한 때문에 기준 실행 방식으로 삼지 않는다.
+Vite builds static files. Use the development server locally. A hosted build may need a Vite base path for the repository subpath. Do not open the app directly with `file://`; browser security and API request restrictions make it an unsupported run mode.
 
-## 운영·테스트 Pages 경로
+## Production and test Pages paths
 
-동일한 GitHub Pages 출처에서 운영본은 `/LMPilot0006/`, 테스트본은 `/LMPilot0006/test/`로 제공한다. `main`과 `test` 중 어느 브랜치에 변경을 푸시해도 배포 워크플로는 두 브랜치의 최신 소스를 각각 빌드하고 하나의 Pages artifact로 조립한다. 운영 빌드의 Vite base path는 `/LMPilot0006/`, 테스트 빌드는 `/LMPilot0006/test/`다.
+On the same GitHub Pages origin, production is served from `/LMPilot0006/` and the test build from `/LMPilot0006/test/`. A push to either `main` or `test` triggers the deployment workflow. The workflow builds the latest source from both branches and combines them into one Pages artifact. The production Vite base path is `/LMPilot0006/`; the test base path is `/LMPilot0006/test/`.
 
-두 경로는 브라우저 출처가 같으므로 IndexedDB와 localStorage는 자동으로 분리되지 않는다. 빌드별 `VITE_APP_NAMESPACE`를 `prod`와 `test`로 설정하여 세션·첨부용 IndexedDB, 설정 키, 앱 캐시 이름을 분리한다. 운영본은 기존 저장소 이름을 유지해 기존 세션과 설정을 이어 쓰고, 테스트본의 전체 로컬 데이터 삭제는 테스트 namespace만 지운다. API-key는 기존 정책대로 메모리에만 둔다.
+Because both paths share an origin, IndexedDB and localStorage would otherwise be shared. Build-time `VITE_APP_NAMESPACE` values of `prod` and `test` isolate session and attachment IndexedDB databases, settings keys, and app cache names. The clear-data action deletes only data in the current namespace. API keys remain in memory only.
 
-## 핵심 인터페이스 제안
+## Core interfaces
 
-프론트엔드 유스케이스는 구체적인 NVIDIA URL이나 스트림 형식에 직접 의존하지 않도록 한다.
+Use provider-independent contracts so frontend use cases do not depend directly on NVIDIA URLs or stream formats.
 
 ```ts
 interface ChatProvider {
@@ -56,60 +57,69 @@ interface SessionRepository {
 }
 ```
 
-추후 서버 방식으로 전환할 때는 서버 프록시용 `ChatProvider` 구현체를 추가한다. 이 경우에도 사용자 API-key를 서버에 보관하지 않는 정책을 유지하려면 요청별 전달이 필요하며, 서버 프로세스에서는 키를 로그·추적·오류 메시지에 남기지 않아야 한다. 서버에서 서비스 운영자 키를 보관하는 방식을 선택하려면 별도 제품 결정과 키 관리 정책이 필요하다.
+If a broader server architecture is introduced later, add a server-proxy `ChatProvider`. To preserve the no-key-storage policy, pass the user's key per request and never write it to server logs, traces, or error messages. Storing an operator-owned service key requires a separate product decision and key-management policy.
 
-현재 Cloudflare Worker 방식은 기존 Provider 인터페이스와 Base URL 설정을 그대로 사용한다. 사용자 키는 요청별 `Authorization` 헤더로 Worker를 통과하며 Worker 변수나 저장소에는 등록하지 않는다. Worker 코드에는 요청/응답 본문을 기록하는 로깅이 없고 Worker 관측 로그를 명시적으로 비활성화한다. 다만 프록시 운영 계정과 플랫폼이 요청 경로에 있으므로 이용자는 운영자를 신뢰해야 한다. 배포된 Worker를 통한 실제 NVIDIA 호출은 사용자 계정과 키로 최종 확인해야 한다.
+The current Cloudflare Worker uses the existing Provider contract and Base URL setting. It forwards the user's key in the per-request `Authorization` header and does not store it in Worker variables or storage. The Worker does not log request or response bodies, and Worker observability is explicitly disabled. Since traffic passes through the Worker account and platform, users must trust its operator. Verify real NVIDIA requests through the deployed Worker with the user's own account and key.
 
-## 데이터와 키 정책
+## Data and key policy
 
-### 영속 저장 허용
+### Persistent data allowed
 
-- 세션 ID, 제목, 생성·수정 시각
-- 메시지 role, 본문, 메시지 시각 및 표시 상태
-- 사용자가 저장한 Base URL과 모델명
-- 사용자가 명시적으로 입력한 앱 UI 환경설정
+- Session ID, title, creation and update timestamps
+- Message role, content, timestamp, and display state
+- User-saved Base URL and model name
+- App UI preferences explicitly set by the user
+- Attachment filename, type, size, original Blob, extracted text, and creation time
 
-### 영속 저장 금지
+### Persistent data prohibited
 
-- API-key 및 인증 헤더
-- API-key가 포함된 URL, 요청 캡처, 오류 로그
-- API-key가 포함된 localStorage, IndexedDB, Cache Storage, 서비스 워커 캐시
+- API keys and authorization headers
+- URLs, request captures, or error logs containing an API key
+- API keys in localStorage, IndexedDB, Cache Storage, or service-worker caches
 
-API-key 입력값은 탭 메모리에서만 유지하고 설정 저장 후에도 재사용할 수 있게 한다. 새로고침과 탭 종료 후 키 입력을 초기화한다. 저장 버튼은 Base URL과 모델명만 저장하며, 키를 저장하지 않는다는 안내를 설정 모달에 표시한다.
+Keep the API key in tab memory so it can be reused after saving settings. Clear it on page reload or tab close. The Save button stores only the Base URL and model name and must explain that the key is not saved.
 
-사용자 코드, 이슈, 대화 내용은 요청 시 선택된 모델 제공자에게 전송될 수 있음을 요청 전에 알린다. 요청 본문을 앱 자체 로그나 분석 이벤트로 수집하지 않는다.
+Before a request, tell users that their code, issues, attachments, and conversations may be sent to the selected model provider. Do not collect request bodies in app logs or analytics.
 
-## 세션과 데이터 삭제
+## Sessions, attachments, and data deletion
 
-- 세션은 IndexedDB에 저장하여 브라우저 재시작 후에도 복원한다.
-- 각 세션은 메시지 목록, 생성 시각, 갱신 시각, 표시 제목을 가진다. 첫 사용자 메시지에서 제목을 만드는 방식은 MVP 기본값으로 제안한다.
-- 데스크톱은 왼쪽 세션 사이드바를 기본으로 하고, 모바일은 열고 닫을 수 있는 드로어로 제공한다.
-- `로컬 데이터 삭제` 버튼은 확인 후 앱 소유 IndexedDB의 전체 세션, 설정 저장소, 앱 소유 Cache Storage 및 Service Worker 데이터를 지운다.
-- 이 버튼은 브라우저의 HTTP 캐시나 다른 사이트 데이터를 삭제하지 않는다. 세션 메시지가 모두 없어지는 작업이므로 확인 문구에 삭제 범위를 명시한다.
+- Store sessions in IndexedDB and restore them after reopening the browser.
+- Store original attachment Blobs and extracted text in a separate IndexedDB `attachments` store, linked by session ID. Messages reference attachment IDs and display metadata only.
+- Let users download an original attachment from its card in a saved conversation.
+- MVP attachment formats: `.txt`, `.md`, `.csv`, `.json`, `.yaml`, `.yml`, `.log`, `.py`, `.js`, `.jsx`, `.ts`, `.tsx`, `.html`, and `.css`. Read files as text in the browser. PDF/DOCX parsing and image OCR are not supported.
+- Limit each file to 2 MB, each message to five attachments, and total extracted attachment text to 80,000 characters. Include extracted text in the request; do not send original binary files to the model provider.
+- Tell users that attachment text, like code and conversation content, may be sent to the selected model provider.
+- Save attachments to the session when sending. Deleting a session also deletes its attachment Blobs and extracted text. Clearing all local data empties every attachment store.
+- IndexedDB is local to the current browser profile, and the app does not encrypt attachments. Anyone with access to the device or browser profile may be able to read saved content.
+- Download analysis results as Markdown with a report title, save time, analyzed attachment filenames, and results.
+- Each session contains messages, creation and update timestamps, and a display title. The default proposed title is derived from the first user message.
+- Use a left session sidebar on desktop and a toggleable drawer on mobile.
+- The Korean-language **Delete all local data** action asks for confirmation, then removes all app-owned IndexedDB sessions, settings, Cache Storage, and service-worker data.
+- This action does not clear the browser's HTTP cache or data belonging to other sites. The confirmation must state that all session messages will be deleted.
 
-## 오류와 스트리밍
+## Errors and streaming
 
-- 스트림은 `fetch`의 응답 스트림을 읽어 SSE 이벤트를 파싱한다. 브라우저 `EventSource`는 일반적으로 POST JSON 요청과 임의 Authorization 헤더에 맞지 않으므로 기본 구현으로 두지 않는다.
-- 스트림 파서는 여러 줄에 나뉜 이벤트, 빈 줄 구분, `[DONE]`, 잘못된 JSON, 서버 오류 이벤트를 처리한다.
-- 사용자가 전송을 취소하면 `AbortController`를 이용해 브라우저 요청을 중단한다.
-- API 오류는 사용자에게 읽을 수 있는 메시지로 표시하되 인증 정보와 민감한 응답 본문은 숨긴다.
-- 모델 출력 Markdown을 HTML로 렌더링할 경우 HTML 주입을 막기 위해 안전한 렌더링 또는 검증된 sanitize 단계를 사용한다.
+- Read streams from `fetch` response bodies and parse SSE events. Browser `EventSource` is generally unsuitable for POST JSON requests with custom Authorization headers.
+- The stream parser handles multi-line events, blank-line separators, `[DONE]`, malformed JSON, and server error events.
+- Use `AbortController` to stop a browser request when the user cancels generation.
+- Show readable API errors while hiding credentials and sensitive response bodies.
+- Render model-generated Markdown safely or sanitize it to prevent HTML/script injection.
 
-## 추후 서버 배포 선택지
+## Deployment options
 
-1. **정적 호스팅 + 브라우저 직접 호출:** 가장 단순하지만 API 공급자의 CORS 지원 여부와 키의 브라우저 노출성을 평가해야 한다.
-2. **정적 호스팅 + 사용자 키 전달형 BFF:** 서버 키 저장 없이 요청 때마다 사용자의 키를 전달할 수 있다. 서버를 경유하므로 최소 수집, 로그 제거, TLS, 요청 제한이 필요하다.
-3. **운영자 키를 사용하는 서비스형 백엔드:** 사용자는 키를 입력하지 않지만 운영자 키 저장·회전, 인증, 과금/사용량 통제, 남용 방지 정책이 필요하다. 현재 요구사항의 키 비저장 원칙을 바꾸는 제품 결정이므로 별도 승인 전까지 선택하지 않는다.
+1. **Static hosting with direct browser calls:** simplest, but depends on the API provider's CORS support and exposes the user-entered key to the browser runtime.
+2. **Static hosting with a user-key relay:** the user key is passed per request and is not stored by the server. Require data minimization, log exclusion, TLS, and request limits. The current Cloudflare Worker follows this narrow relay pattern for GitHub Pages.
+3. **Service backend with an operator key:** users do not enter keys, but the operator must store and rotate a key, authenticate users, control usage and costs, and prevent abuse. This changes the current no-key-storage product policy and requires a separate decision and approval.
 
-서버 구현 기술은 MVP 평가 이후 선택한다. 기존 프로젝트가 Python이므로 FastAPI를 후보로 둘 수 있으나, 이는 확정 결정이 아니다.
+Choose any broader server technology after MVP evaluation. FastAPI is a possible candidate because the existing project uses Python, but no choice has been made.
 
-## MVP 평가 게이트
+## MVP evaluation gates
 
-다음 항목을 평가한 뒤 서버 작업 진입 여부를 결정한다.
+Evaluate these items before expanding server work:
 
-- 로컬 개발 서버에서 NVIDIA 호환 엔드포인트로 직접 호출이 되는가?
-- GitHub Pages와 같은 HTTPS 정적 호스트에서도 CORS가 허용되는가?
-- 제공자 키가 앱 저장소, 로그, 빌드 파일에 기록되지 않는가?
-- 긴 세션과 스트리밍이 PC·모바일 브라우저에서 안정적인가?
-- 세션 복원 및 전체 로컬 데이터 삭제가 기대대로 동작하는가?
-- 프롬프트와 코드가 외부 제공자로 전송되는 점을 사용자에게 충분히 알리는가?
+- Do NVIDIA-compatible requests work through the local development path?
+- Does direct browser access from an HTTPS static host pass CORS? If not, does the approved Worker relay work?
+- Are provider keys absent from app storage, logs, and build artifacts?
+- Are long conversations and streaming stable on desktop and mobile browsers?
+- Do session restoration and full local-data deletion work as expected?
+- Are users clearly informed that prompts and code are sent to an external model provider?

@@ -1,75 +1,82 @@
-# 웹 MVP Todo 및 작업 분장
+# Web MVP TODO and Workstream Assignments
 
-상태 기준: `[ ]` 미착수, `[-]` 진행 중, `[x]` 완료. 핵심 프론트엔드 MVP와 정적 빌드는 완료했다. GitHub Pages 출처에서 NVIDIA 직접 호출이 CORS로 차단되어 사용자 승인에 따라 Cloudflare Worker 중계기를 추가하고 배포했다. 실제 NVIDIA 키를 이용한 브라우저 통합 확인은 남아 있다. 아키텍처 결정이 바뀌면 Integrator가 이 문서와 `architecture.md`를 함께 갱신한다.
+Status: `[ ]` not started, `[-]` in progress, `[x]` complete. The core frontend MVP and static build are complete. Direct NVIDIA calls from the GitHub Pages origin were blocked by CORS, so an approved Cloudflare Worker relay was added and deployed. Browser integration using a real NVIDIA key remains to be verified. When architecture decisions change, the Integrator updates this document and `architecture.md` together.
 
-## 공통 / Integrator
+## Shared / Integrator
 
-- [x] 요구사항과 AI 역할 협업 규칙을 문서화한다.
-- [x] 프론트엔드와 Provider 간 `ChatRequest`, 스트리밍, 오류 계약을 정의한다.
-- [x] 데이터 모델과 첫 사용자 메시지 기반 세션 제목 정책을 정의한다.
-- [ ] 각 단계 종료 시 미해결 위험과 평가 결과를 요약한다.
+- [x] Document product requirements and AI-agent collaboration rules.
+- [x] Define the `ChatRequest`, streaming, and error contracts between the frontend and Provider.
+- [x] Define the data model and session-title policy based on the first user message.
+- [ ] Summarize unresolved risks and evaluation results at the end of each phase.
 
 ## Frontend
 
-- [x] 기존 PySide6 앱의 사용자 흐름을 웹 화면 요구사항에 매핑한다.
-- [x] PC 사이드바와 모바일 세션 드로어를 포함한 반응형 채팅 UI를 구현한다.
-- [x] 대화 세션 생성, 선택, 제목 표시, 전환 기능을 구현한다.
-- [x] 코드·이슈·Import Layer 입력 및 텍스트 파일 불러오기를 구현한다.
-- [x] 전송 프롬프트 미리보기를 구현한다.
-- [x] 설정 모달에 Base URL, 모델명, API-key 필드와 저장 버튼을 구현한다.
-- [x] 저장 버튼으로 Base URL·모델명만 저장하고 API-key는 현재 탭 메모리에서만 유지한다.
-- [x] IndexedDB 세션 저장·복원·갱신 기능을 구현한다.
-- [x] 스트리밍 응답 표시, 취소, 로딩 및 오류 상태를 구현한다.
-- [x] 안전한 Markdown 렌더링, 응답 복사 및 다운로드 기능을 구현한다.
-- [x] 전체 로컬 데이터 삭제 버튼, 확인, 완료 안내를 구현한다.
-- [x] 외부 모델로 입력 내용이 전송될 수 있음을 설정/전송 UI에 알린다.
+- [x] Map the existing PySide6 app workflow to web UI requirements.
+- [x] Implement a responsive chat UI with a desktop sidebar and mobile session drawer.
+- [x] Implement conversation creation, selection, titles, and switching.
+- [x] Implement code, issue, and Import Layer input, plus text-file loading.
+- [x] Implement multiple text-document attachments, extracted-text previews before sending, and per-file removal.
+- [x] Store original attachments and extracted text in session-scoped IndexedDB; support original-file download and session/all-data deletion.
+- [x] Download analysis results as Markdown reports with attachment lists and timestamps.
+- [x] Enforce attachment format, file-count, file-size, and extracted-text limits, and explain provider transmission.
+- [x] Implement a request preview.
+- [x] Implement Base URL, model name, and API-key fields and a Save button in the settings dialog.
+- [x] Save only the Base URL and model name; keep the API key in current-tab memory only.
+- [x] Implement IndexedDB session storage, restoration, and updates.
+- [x] Implement streaming responses, cancellation, loading states, and errors.
+- [x] Implement safe Markdown rendering, response copying, and downloads.
+- [x] Implement a confirmation and completion message for deleting all local app data.
+- [x] Inform users that input may be sent to an external model provider.
 
 ## Backend / API
 
-- [x] 정적 MVP의 브라우저 직접 호출 범위와 제한을 문서화한다.
-- [ ] NVIDIA OpenAI 호환 엔드포인트, 모델명, 스트리밍 이벤트 동작을 확인한다.
-- [x] Provider 인터페이스와 요청/응답/오류 타입을 정의한다.
-- [x] 로컬 Vite 개발 서버에 NVIDIA API 프록시를 추가해 브라우저 CORS 제한을 우회한다.
-- [x] GitHub Pages 출처의 NVIDIA CORS 사전 요청 결과를 기록한다: `https://hyangdan2.github.io` 출처의 `OPTIONS /v1/chat/completions` 응답에 `Access-Control-Allow-Origin`이 없었다.
-- [x] 사용자 키 전달형 Cloudflare Worker 중계기를 추가한다.
-- [x] Worker의 출처·경로·메서드 제한, 입력 크기 제한, 로그 비수집, 스트리밍 전달 요구사항을 구현하고 문서화한다.
-- [x] Cloudflare Worker를 `https://lmpilot-nvidia-proxy.hd2botstarter.workers.dev`에 배포한다.
-- [ ] Pages에서 실제 키로 NVIDIA 연결 및 스트리밍을 확인한다.
-- [ ] 운영자 키 보관 방식은 현재 범위에서 구현하지 않고 별도 제품 결정을 요청한다.
+- [x] Document the scope and limitations of browser-direct calls in the static MVP.
+- [ ] Verify NVIDIA OpenAI-compatible endpoints, model availability, and streaming events.
+- [x] Define the Provider interface and request, response, and error types.
+- [x] Add an NVIDIA API proxy to the local Vite dev server to bypass browser CORS restrictions.
+- [x] Record the NVIDIA CORS preflight result for the GitHub Pages origin: the `OPTIONS /v1/chat/completions` response for `https://hyangdan2.github.io` did not include `Access-Control-Allow-Origin`.
+- [x] Add a Cloudflare Worker relay that forwards user keys per request.
+- [x] Implement and document Worker origin, route, method, and request-size limits, log exclusion, and streaming forwarding.
+- [x] Deploy the Cloudflare Worker to `https://lmpilot-nvidia-proxy.hd2botstarter.workers.dev`.
+- [ ] Verify NVIDIA connection and streaming from Pages through the Worker using a real key.
+- [ ] Do not store an operator-owned key in the current scope; request a separate product decision if needed.
 
 ## QA
 
-- [ ] 요구사항별 수동 시나리오와 완료 기준을 작성한다.
-- [ ] PC 및 주요 모바일 viewport에서 레이아웃과 입력 조작을 확인한다. PC에서 한글 IME 조합 중 Enter 확정 시 전송되지 않고, Shift+Enter는 줄바꿈되는지 확인한다.
-- [ ] 여러 세션 생성·전환·저장·재실행 복원을 확인한다.
-- [ ] API-key가 localStorage, IndexedDB, Cache Storage, URL, 콘솔, 로그, 정적 산출물에 남지 않는지 확인한다.
-- [ ] 저장 버튼이 URL·모델명만 저장하고 키를 저장하지 않는지 확인한다.
-- [ ] 전체 로컬 데이터 삭제 후 세션과 저장 설정이 제거되는지 확인한다.
-- [ ] 스트리밍 성공, 오류, 타임아웃, 사용자 취소 시 동작을 확인한다.
-- [x] NVIDIA 직접 호출의 Pages 출처 CORS 사전 요청을 확인한다.
-- [x] 배포 Worker의 Pages 출처 CORS 사전 요청이 `204`로 응답하는지 확인한다.
-- [ ] 배포 Worker를 통한 모델 목록과 채팅 스트리밍을 실제 브라우저에서 확인한다.
-- [ ] HTML/Markdown 출력에서 스크립트 주입이 실행되지 않는지 확인한다.
-- [ ] 사용자 입력이 외부 모델 제공자에게 전달된다는 안내를 확인한다.
-- [ ] MVP 평가 게이트 결과와 차단 항목을 기록한다.
+- [ ] Write manual scenarios and completion criteria for each requirement.
+- [x] Check mobile font and layout behavior for the composer, reference-material inputs, and settings fields at a 390×844 viewport.
+- [ ] Check input interactions on desktop and major mobile devices. Verify Korean IME behavior on desktop and focus-related input zoom prevention in iPhone Safari on real devices.
+- [ ] Verify session creation, switching, persistence, and restoration after restart.
+- [ ] Verify supported attachments, persistence after reload, per-session deletion, and full data deletion.
+- [ ] Verify file-size, attachment-count, and text-length limits; unsupported-file rejection; and report source metadata.
+- [ ] Verify API keys are absent from localStorage, IndexedDB, Cache Storage, URLs, console output, logs, and static artifacts.
+- [ ] Verify Save stores only the URL and model name, not the key.
+- [ ] Verify full local-data deletion removes sessions and saved settings.
+- [ ] Verify streaming success, errors, timeouts, and user cancellation.
+- [x] Check the NVIDIA direct-call CORS preflight from the Pages origin.
+- [x] Check that the deployed Worker's Pages-origin CORS preflight returns `204`.
+- [ ] Verify model listing and chat streaming through the deployed Worker in a real browser.
+- [ ] Verify script injection does not execute in HTML/Markdown output.
+- [ ] Verify the UI explains that user input is sent to an external model provider.
+- [ ] Record MVP evaluation-gate results and blockers.
 
 ## Git Admin
 
-- [x] 기존 PySide6 앱과 분리된 웹 디렉터리 구조를 구성한다.
-- [x] 프론트엔드 개발·빌드·미리보기 명령을 문서화한다.
-- [x] `.gitignore`에 의존성, 빌드 출력, 로컬 환경 설정을 추가한다.
-- [ ] API-key나 실제 사용자 데이터가 예제 설정, fixture, 로그, 스크린샷에 없는지 점검한다.
-- [x] GitHub Pages 정적 배포 경로용 Vite base path 설정을 제공한다.
-- [x] 동일 GitHub Pages artifact에 `/LMPilot0006/` 운영본과 `/LMPilot0006/test/` 테스트본을 함께 조립한다.
-- [x] `main` 및 `test` 푸시에서 두 브랜치를 각각 빌드하고, 세션·설정·앱 캐시 저장소를 환경별로 격리한다.
-- [x] 운영·테스트 경로를 실제 Pages 배포에서 열어 라우팅과 데이터 격리를 확인한다.
-- [ ] 배포 산출물에 비밀 설정이 들어가지 않는지 배포 전 확인 절차를 만든다.
-- [ ] 변경 파일과 저장소 상태를 보고하고, 요청된 범위 안에서만 커밋/배포를 수행한다.
+- [x] Keep the existing PySide6 app separate from the web source tree.
+- [x] Document frontend development, build, and preview commands.
+- [x] Add dependencies, build output, and local environment files to `.gitignore`.
+- [ ] Check that examples, fixtures, logs, and screenshots contain no API keys or real user data.
+- [x] Configure the Vite base path for GitHub Pages repository subpaths.
+- [x] Assemble production at `/LMPilot0006/` and test at `/LMPilot0006/test/` in one GitHub Pages artifact.
+- [x] Build both branches on pushes to `main` and `test`, and isolate session, settings, and app cache stores by environment.
+- [x] Open both production and test paths in the deployed Pages site and verify routing and data isolation.
+- [ ] Define a pre-deployment check that prevents secrets from entering build artifacts.
+- [ ] Report changed files and repository state; commit or deploy only within the scope explicitly requested by the user.
 
-## 평가 후 서버화 결정
+## Post-evaluation server decisions
 
-- [x] Pages 출처의 NVIDIA CORS 사전 요청에서 허용 헤더가 없는 것을 확인한다.
-- [x] 사용자 키 전달형 Worker가 필요하다고 결정한다.
-- [ ] 서버 인증, 요청 제한, 데이터 보존, 로그 정책을 확정한다.
-- [ ] 서버화 선택이 키 비저장 원칙에 미치는 영향을 사용자와 합의한다.
-- [ ] 승인된 서버화 작업을 별도 TODO와 배포 계획으로 추가한다.
+- [x] Confirm that the Pages-origin NVIDIA CORS preflight does not allow direct requests.
+- [x] Decide that a user-key relay is needed and use the Cloudflare Worker for GitHub Pages.
+- [ ] Finalize server authentication, request limits, data retention, and logging policy.
+- [ ] Agree with the user on how server deployment affects the no-key-storage policy.
+- [ ] Add separately scoped TODO items and a deployment plan for any approved server expansion.

@@ -1,73 +1,75 @@
-# AI 에이전트 Harness 가이드
+# AI Agent Harness Guide
 
-## 목적
+## Purpose
 
-이 문서는 LMPilot0004의 PySide6 앱을 로컬 실행형 정적 웹 MVP로 확장하고, 평가 후 서버 배포를 준비하기 위해 AI 에이전트들이 따라야 할 역할·규칙·협업 방식을 정의한다. 여기서 Harness는 애플리케이션 런타임 계층이 아니라 프로젝트 작업에 참여하는 AI 에이전트의 가이드다.
+This guide defines the roles, rules, and collaboration practices for AI agents extending the LMPilot0004 PySide6 app into a local-first static web MVP and preparing it for deployment. The harness is a guide for agents working on the project; it is not an application runtime layer.
 
-## 공통 목표와 확정 요구사항
+## Shared goals and confirmed requirements
 
-- 기존 PySide6 앱의 코드·이슈·Import Layer 입력, 프롬프트 구성, 모델 응답 기능을 웹에서 사용할 수 있게 한다.
-- MVP는 로컬에서 실행하는 정적 웹 앱으로 만든다. 이후 정적 호스팅 및 선택적 서버 API로 확장할 수 있도록 프론트엔드와 모델 제공자 연결부를 분리한다.
-- ChatGPT 스타일의 대화 화면을 제공하고 PC와 모바일 화면을 지원한다.
-- 설정 모달에서 Base URL, 모델명, API-key를 입력한다. 저장 버튼은 Base URL과 모델명만 저장하고 API-key는 어떤 브라우저 저장소에도 저장하지 않는다.
-- API-key는 현재 페이지가 열려 있는 동안 메모리에서만 사용한다. 새로고침이나 탭 종료 뒤에는 재입력이 필요하다.
-- 여러 대화 세션을 만들고 전환할 수 있으며, 브라우저를 다시 열어도 세션을 복원한다.
-- 캐시 제거는 앱이 소유한 모든 세션과 설정 데이터를 지운다. 브라우저 전체의 HTTP 캐시를 삭제하는 기능으로 표현하지 않는다.
-- 모델 요청에는 사용자가 입력한 코드, 이슈, 대화가 NVIDIA 또는 설정한 모델 제공자로 전송될 수 있음을 UI에서 알린다.
+- Bring the existing PySide6 workflow for code, issue, and Import Layer input, prompt construction, and model responses to the web.
+- Keep the MVP as a static web app that runs locally. Separate the frontend from model-provider connections so the app can later support static hosting and an optional API server.
+- Provide a ChatGPT-style conversation view that works on desktop and mobile.
+- Let users enter a Base URL, model name, and API key in Settings. Saving stores only the Base URL and model name; never store an API key in browser storage.
+- Keep the API key in memory only while the current page is open. Require users to re-enter it after a reload or when opening a new tab.
+- Support multiple conversation sessions, session switching, and session restoration after reopening the browser.
+- The clear-data action removes all app-owned sessions and settings. Do not describe it as clearing the browser's entire HTTP cache.
+- Tell users that code, issues, attachments, and conversation content may be sent to NVIDIA or the configured model provider.
+- Write all project documentation in English. Keep the product UI and user-facing app copy in Korean unless the user requests a language change.
 
-## 역할과 책임
+## Roles and responsibilities
 
 ### Lead / Integrator
 
-- 요구사항과 아키텍처 문서를 기준으로 작업 범위를 정하고 통합한다.
-- 에이전트 간 인터페이스, 저장 데이터 형식, API 계약 변경을 조율한다.
-- 설계 변경은 `docs/architecture.md`에 반영하고, 관련 작업 항목은 `docs/todo.md`에서 갱신한다.
-- 구현 간 충돌을 해결하고 최종 변경 파일, 검증 결과, 남은 제약을 보고한다.
+- Set the scope against the requirements and architecture documents, then integrate the work.
+- Coordinate changes to agent interfaces, storage formats, and API contracts.
+- Record design changes in `docs/architecture.md` and update related tasks in `docs/todo.md`.
+- Resolve implementation conflicts and report changed files, verification results, and remaining limitations.
 
 ### Frontend Agent
 
-- 반응형 채팅 UI, 세션 목록, 설정 모달, 로컬 저장, 파일 입력과 응답 다운로드를 구현한다.
-- API-key가 localStorage, IndexedDB, Cache Storage, URL, 콘솔, 분석 이벤트, 오류 로그에 들어가지 않게 한다.
-- Provider 인터페이스를 통해 모델 서비스와 통신하며 UI에 제공자별 요청 형식을 노출하지 않는다.
-- 캐시 제거 전에 사용자 확인을 받고 완료 상태를 명확히 표시한다.
+- Implement the responsive chat UI, session list, Settings dialog, local persistence, file input, and response downloads.
+- Keep API keys out of localStorage, IndexedDB, Cache Storage, URLs, console output, analytics events, and error logs.
+- Communicate with model services through the Provider interface; keep provider-specific request details out of the UI.
+- Ask for confirmation before clearing data and clearly report when the action is complete.
 
 ### Backend / API Agent
 
-- MVP에서는 브라우저 직접 호출과 NVIDIA API 호환성 및 CORS를 평가한다. 별도 서버 구현은 MVP 범위에 포함하지 않는다.
-- Frontend Agent와 메시지·스트리밍·오류 응답 계약을 합의한다.
-- 향후 BFF/API 서버가 필요해지면 최소 API 계약, 인증 경계, 키 취급 방식을 제안한다.
-- 서버 측 로그, 추적, 오류 응답에 API-key와 사용자 프롬프트가 남지 않도록 설계한다.
+- The product frontend remains a static app. For local development, evaluate browser-direct requests and NVIDIA API compatibility; the Vite dev server has a development-only proxy for NVIDIA.
+- For GitHub Pages, maintain the approved Cloudflare Worker relay that forwards per-request user keys without storing them. Keep the Worker limited to required routes, origins, and methods, and preserve streaming responses.
+- Agree on message, streaming, and error contracts with the Frontend Agent.
+- Do not add a broader application backend unless the user requests or approves that phase.
+- Ensure server-side logs, traces, and error responses do not contain API keys or user prompts.
 
 ### QA Agent
 
-- 요구사항별 수동 확인 시나리오와 자동화 후보를 정의한다.
-- API-key 비저장, 세션 복원·삭제, 모바일 UI, 스트리밍 종료·오류, 직접 호출 CORS를 중점 확인한다.
-- 실패를 재현할 입력·환경·결과를 기록하고, 차단되는 릴리스 조건을 Integrator에게 알린다.
+- Define manual scenarios and automation candidates for each requirement.
+- Focus on API-key non-persistence, session restoration and deletion, mobile UI, streaming completion/errors, and CORS behavior for direct calls and the Worker relay.
+- Record reproducible inputs, environment, and results for failures, and report release blockers to the Integrator.
 
 ### Git Admin Agent
 
-- 기존 PySide6 앱을 보존하면서 웹 소스와 빌드 구성을 추가한다.
-- `.gitignore`, 브랜치, 변경 범위, 정적 배포 경로를 관리한다.
-- 키, 로컬 세션 데이터, 개인 설정이 저장소나 배포 산출물에 포함되지 않는지 확인한다.
-- 커밋 또는 배포 전 변경 파일과 저장소 상태를 요약한다. 사용자가 명시하지 않은 원격 push, PR 생성, 배포는 하지 않는다.
+- Preserve the existing PySide6 app while maintaining the web source and build configuration.
+- Manage `.gitignore`, branches, change scope, and static deployment paths.
+- Check that keys, local session data, and personal settings are not included in the repository or deployment artifacts.
+- Summarize changed files and repository state before commits or deployments. Never push, create a pull request, or deploy unless the user explicitly requests it.
 
-## 작업 및 협업 규칙
+## Work and collaboration rules
 
-1. 작업을 시작하기 전에 관련 문서와 기존 구현을 확인한다. 현재 앱의 기준 동작은 저장소 루트 `README.md`와 `app/` 코드다.
-2. 한 에이전트는 한정된 파일·책임을 맡는다. 다른 역할 소유 파일을 변경해야 하면 통합자에게 먼저 알리고 계약을 합의한다.
-3. 공통 계약 변경은 코드보다 먼저 문서에 기록하고, 영향을 받는 역할과 TODO를 함께 갱신한다.
-4. 비밀정보나 사용자 대화 내용을 예제, 테스트 fixture, 로그, 스크린샷에 포함하지 않는다. 예시 키는 `YOUR_API_KEY` 같은 명백한 자리표시자만 사용한다.
-5. 완료 보고에는 구현 내용, 변경 파일, 수행한 검증, 미해결 항목과 차단 사유를 포함한다.
-6. 사용자가 요청하지 않은 기능 확장이나 외부 서비스 연동은 범위에 추가하지 않는다.
+1. Read relevant documents and existing implementation before starting. The reference behavior for the existing app is documented in the repository-root `README.md` and `app/` code.
+2. Assign each agent a bounded set of files and responsibilities. Notify the Integrator and agree on the contract before changing files owned by another role.
+3. Record shared contract changes in documentation before code changes, and update affected roles and TODO items.
+4. Do not include secrets or user conversation content in examples, test fixtures, logs, or screenshots. Use unmistakable placeholders such as `YOUR_API_KEY` for sample keys.
+5. Include implementation details, changed files, verification performed, unresolved items, and blockers in completion reports.
+6. Do not expand scope with unrequested features or external service integrations.
 
-## 완료 조건
+## Completion criteria
 
-- 해당 작업의 TODO에 적힌 산출물이 존재하고 요구사항과 일치한다.
-- 키가 앱의 영속 저장소·로그·정적 산출물에 기록되지 않는다.
-- 변경된 공통 계약과 아키텍처가 문서에 반영된다.
-- 검증 결과와 제한 사항을 Integrator가 재현 가능한 형태로 전달받는다.
+- The artifacts listed in the relevant TODO items exist and meet their requirements.
+- Keys are not written to app-owned persistent storage, logs, or static artifacts.
+- Changes to shared contracts and architecture are reflected in the documentation.
+- The Integrator receives reproducible verification results and known limitations.
 
-## 문서 인덱스
+## Document index
 
-- 제품 및 시스템 구조: [`architecture.md`](architecture.md)
-- 역할별 작업 목록 및 평가 게이트: [`todo.md`](todo.md)
+- Product and system structure: [`architecture.md`](architecture.md)
+- Role-specific tasks and evaluation gates: [`todo.md`](todo.md)

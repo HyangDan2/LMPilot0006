@@ -4,6 +4,7 @@ Read [`docs/ai-harness.md`](docs/ai-harness.md) before changing this project. Us
 
 Project constraints:
 
+- Write and maintain all project documentation in English. Keep the product UI and user-facing app copy in Korean unless the user requests a language change.
 - Keep the MVP frontend static and hostable. Do not add a backend unless the user requests or approves that phase.
 - Never persist, log, or bundle an API key. Only Base URL and model name may be persisted as settings.
 - Store conversation sessions locally and make the clear-data action remove all app-owned sessions and settings.
