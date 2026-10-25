@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, test]
   workflow_dispatch:
 
 permissions:
@@ -18,23 +18,49 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
+      - name: Check out production branch
         uses: actions/checkout@v4
+        with:
+          ref: main
+          path: production
+      - name: Check out test branch
+        uses: actions/checkout@v4
+        with:
+          ref: test
+          path: test-source
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: production/package-lock.json
       - name: Install dependencies
         run: npm ci
-      - name: Build site
+        working-directory: production
+      - name: Build production site
         run: npm run build
         env:
           VITE_BASE_PATH: /LMPilot0006/
+          VITE_APP_NAMESPACE: prod
+        working-directory: production
+      - name: Install test dependencies
+        run: npm ci
+        working-directory: test-source
+      - name: Build test site
+        run: npm run build
+        env:
+          VITE_BASE_PATH: /LMPilot0006/test/
+          VITE_APP_NAMESPACE: test
+        working-directory: test-source
+      - name: Assemble production and test sites
+        run: |
+          mkdir -p pages/test
+          cp -a production/dist/. pages/
+          cp -a test-source/dist/. pages/test/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: pages
 
   deploy:
     environment:

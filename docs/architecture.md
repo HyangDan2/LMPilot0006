@@ -29,6 +29,12 @@ GitHub Pages에서 NVIDIA 직접 호출이 CORS로 차단된 것을 확인하여
 
 Vite 빌드 결과는 정적 파일이어야 한다. 로컬 개발 시 개발 서버를 사용하며, 배포 시 저장소 프로젝트 경로를 포함한 base path 설정이 필요할 수 있다. `file://`로 HTML을 직접 여는 실행 방식은 API 요청과 브라우저 보안 제한 때문에 기준 실행 방식으로 삼지 않는다.
 
+## 운영·테스트 Pages 경로
+
+동일한 GitHub Pages 출처에서 운영본은 `/LMPilot0006/`, 테스트본은 `/LMPilot0006/test/`로 제공한다. `main`과 `test` 중 어느 브랜치에 변경을 푸시해도 배포 워크플로는 두 브랜치의 최신 소스를 각각 빌드하고 하나의 Pages artifact로 조립한다. 운영 빌드의 Vite base path는 `/LMPilot0006/`, 테스트 빌드는 `/LMPilot0006/test/`다.
+
+두 경로는 브라우저 출처가 같으므로 IndexedDB와 localStorage는 자동으로 분리되지 않는다. 빌드별 `VITE_APP_NAMESPACE`를 `prod`와 `test`로 설정하여 세션·첨부용 IndexedDB, 설정 키, 앱 캐시 이름을 분리한다. 운영본은 기존 저장소 이름을 유지해 기존 세션과 설정을 이어 쓰고, 테스트본의 전체 로컬 데이터 삭제는 테스트 namespace만 지운다. API-key는 기존 정책대로 메모리에만 둔다.
+
 ## 핵심 인터페이스 제안
 
 프론트엔드 유스케이스는 구체적인 NVIDIA URL이나 스트림 형식에 직접 의존하지 않도록 한다.

@@ -1,10 +1,11 @@
 import type { ChatSession, ChatSettings } from './types';
 
-const DB_NAME = 'lmpilot-web';
+const APP_NAMESPACE = import.meta.env.VITE_APP_NAMESPACE || (import.meta.env.MODE === 'production' ? 'prod' : 'dev');
+const DB_NAME = APP_NAMESPACE === 'prod' ? 'lmpilot-web' : `lmpilot-web-${APP_NAMESPACE}`;
 const DB_VERSION = 1;
 const SESSION_STORE = 'sessions';
-const SETTINGS_KEY = 'lmpilot-web-settings-v1';
-const APP_CACHE_PREFIX = 'lmpilot-web-';
+const SETTINGS_KEY = APP_NAMESPACE === 'prod' ? 'lmpilot-web-settings-v1' : `lmpilot-web-${APP_NAMESPACE}-settings-v1`;
+const APP_CACHE_PREFIX = APP_NAMESPACE === 'prod' ? 'lmpilot-web-' : `lmpilot-web-${APP_NAMESPACE}-`;
 
 export const DEFAULT_SETTINGS: ChatSettings = {
   baseUrl: 'https://integrate.api.nvidia.com/v1',
